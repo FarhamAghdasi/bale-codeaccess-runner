@@ -1,0 +1,67 @@
+name: Run Bale Bot (6h cycle)
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout private source repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.REPO_NAME }}          # your private repo
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+          path: bot-private
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies (Playwright)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 libasound2
+          python -m playwright install --with-deps chromium
+
+      - name: Install Python dependencies
+        run: |
+          cd bot-private
+          pip install -r requirements.txt
+
+      - name: Configure Git for backup pushes
+        run: |
+          git config --global user.email "bot@runner"
+          git config --global user.name "GitHub Actions"
+          cd bot-private
+          git remote set-url origin https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/${{ secrets.REPO_NAME }}.git
+
+      - name: Restore state from backup
+        run: |
+          cd bot-private
+          python src/core/lifecycle.py restore
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Run bot
+        run: |
+          cd bot-private
+          python src/core/bot.py
+        env:
+          BALE_TOKEN: ${{ secrets.BALE_TOKEN }}
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Final backup (always)
+        if: always()
+        run: |
+          cd bot-private
+          python src/core/lifecycle.py backup
+        env:
+          PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
