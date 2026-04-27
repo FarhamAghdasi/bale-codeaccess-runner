@@ -6,7 +6,7 @@ on:
 env:
   PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT_C }}
   PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
-  VCPKG_DIR: C:\vcpkg
+  VCPKG_ROOT: ./vcpkg
 
 jobs:
   build:
@@ -17,48 +17,47 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Clone private repository
-        run: |
-          git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
+        run: git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
         shell: cmd
 
       - name: Cache vcpkg
         id: cache-vcpkg
         uses: actions/cache@v3
         with:
-          path: ${{ env.VCPKG_DIR }}
+          path: ${{ env.VCPKG_ROOT }}
           key: ${{ runner.os }}-vcpkg-${{ hashFiles('private-repo/vcpkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
-      - name: Install vcpkg (if not cached)
-        if: steps.cache-vcpkg.outputs.cache-hit != 'true'
+      - name: Setup vcpkg
         run: |
-          git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_DIR }}
-          cd ${{ env.VCPKG_DIR }}
-          .\bootstrap-vcpkg.bat
-        shell: cmd
-
-      - name: Update vcpkg (even if cached)
-        run: |
-          cd ${{ env.VCPKG_DIR }}
-          git pull origin master
-          .\bootstrap-vcpkg.bat
+          if not exist "${{ env.VCPKG_ROOT }}\vcpkg.exe" (
+            echo Cloning vcpkg...
+            git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
+            cd ${{ env.VCPKG_ROOT }}
+            .\bootstrap-vcpkg.bat
+          ) else (
+            echo vcpkg already exists, updating...
+            cd ${{ env.VCPKG_ROOT }}
+            git pull origin master
+            .\bootstrap-vcpkg.bat
+          )
         shell: cmd
 
       - name: Install dependencies
         run: |
           cd private-repo
-          ${{ env.VCPKG_DIR }}\vcpkg install openssl:x64-windows curl:x64-windows
+          %VCPKG_ROOT%\vcpkg install openssl:x64-windows curl:x64-windows
         shell: cmd
 
       - name: Configure CMake
         run: |
           cd private-repo
-          mkdir build
+          mkdir build 2>nul
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_DIR }}\scripts\buildsystems\vcpkg.cmake
-        shell: powershell
+          cmake .. -G "Visual Studio 17 2022" -A x64 ^
+            -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+        shell: cmd
 
       - name: Build Release
         run: |
@@ -100,9 +99,8 @@ jobs:
 
           $uploadUrl = $createResponse.upload_url -replace '{.*$}', ''
 
-          # استفاده از Invoke-RestMethod برای آپلود (بدون مشکل curl)
           $assetPath = Resolve-Path "private-repo/build/Release/client.exe"
-          $uploadUri = "$uploadUrl`?name=client.exe"
+          $uploadUri = "$uploadUrl?name=client.exe"
 
           Invoke-RestMethod -Uri $uploadUri `
             -Method Post `
@@ -110,5 +108,5 @@ jobs:
             -InFile $assetPath `
             -ContentType "application/octet-stream"
 
-          Write-Host "Release created and asset uploaded successfully"
+          Write-Host "Release created and asset uploaded"
         shell: powershell
