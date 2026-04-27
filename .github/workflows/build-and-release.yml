@@ -1,0 +1,95 @@
+name: Build C++
+
+on:
+  workflow_dispatch:
+
+env:
+  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+  PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout public repo (workflow only)
+        uses: actions/checkout@v4
+
+      - name: Clone private repository
+        run: |
+          git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
+        shell: cmd
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: 'C:/vcpkg'
+          vcpkgJsonGlob: '**/vcpkg.json'
+
+      - name: Install dependencies via vcpkg
+        run: |
+          cd private-repo
+          vcpkg install openssl:x64-windows
+          vcpkg install libcurl:x64-windows
+        shell: cmd
+
+      - name: Configure CMake
+        run: |
+          cd private-repo
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+        shell: powershell
+
+      - name: Build Release
+        run: |
+          cd private-repo/build
+          cmake --build . --config Release
+        shell: cmd
+
+      - name: Verify executable
+        run: |
+          if exist "private-repo\build\Release\client.exe" (
+            echo Build successful
+          ) else (
+            echo ERROR: client.exe not found
+            exit /b 1
+          )
+        shell: cmd
+
+      - name: Create Release and Upload Asset with curl
+        run: |
+          $tag = "build-$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
+          $releaseName = "C++ RAT Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          
+          # Create release
+          $body = @{
+            tag_name = $tag
+            name = $releaseName
+            body = "Automated C++ build from GitHub Actions"
+            draft = $false
+            prerelease = $false
+          } | ConvertTo-Json
+          
+          $createResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ env.PRIVATE_REPO }}/releases" `
+            -Method Post `
+            -Headers @{ 
+              Authorization = "Bearer ${{ env.PRIVATE_REPO_PAT }}"
+              Accept = "application/vnd.github.v3+json"
+            } `
+            -Body $body `
+            -ContentType "application/json"
+          
+          $uploadUrl = $createResponse.upload_url -replace '{.*$', ''
+          
+          # Upload asset using curl
+          curl.exe -L `
+            -X POST `
+            -H "Authorization: Bearer ${{ env.PRIVATE_REPO_PAT }}" `
+            -H "Content-Type: application/octet-stream" `
+            --upload-file "private-repo/build/Release/client.exe" `
+            "$uploadUrl?name=client.exe"
+          
+          Write-Host "Release created and asset uploaded successfully"
+        shell: powershell
