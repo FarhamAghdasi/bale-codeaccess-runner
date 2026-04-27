@@ -1,8 +1,6 @@
 name: Run Bale Bot (6h cycle)
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'   # Every 6 hours
   workflow_dispatch:
 
 jobs:
