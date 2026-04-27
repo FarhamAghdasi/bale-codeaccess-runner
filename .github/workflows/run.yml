@@ -28,10 +28,12 @@ jobs:
           cd bot-private
           pip install -r requirements.txt
 
-      - name: Install system dependencies (Playwright)
+      - name: Install system dependencies (Playwright + v2ray)
         run: |
           sudo apt-get update
           sudo apt-get install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 libasound2t64
+          # Install xray
+          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
           python -m playwright install --with-deps chromium
 
       - name: Configure Git for backup pushes
@@ -57,6 +59,7 @@ jobs:
           OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
           ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
           PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+          VLESS_CONFIG: ${{ secrets.VLESS_CONFIG }}
 
       - name: Final backup (always)
         if: always()
