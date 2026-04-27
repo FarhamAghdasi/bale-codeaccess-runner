@@ -6,7 +6,6 @@ on:
 env:
   PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT_C }}
   PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
-  VCPKG_ROOT: ./vcpkg
 
 jobs:
   build:
@@ -20,60 +19,63 @@ jobs:
         run: git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
         shell: cmd
 
+      - name: Set VCPKG root (absolute path)
+        run: echo "VCPKG_ROOT=${{ github.workspace }}\vcpkg" >> $env:GITHUB_ENV
+        shell: powershell
+
       - name: Cache vcpkg
         id: cache-vcpkg
         uses: actions/cache@v3
         with:
-          path: ${{ env.VCPKG_ROOT }}
+          path: ${{ github.workspace }}\vcpkg
           key: ${{ runner.os }}-vcpkg-${{ hashFiles('private-repo/vcpkg.json') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-
 
       - name: Setup vcpkg
         run: |
-          if not exist "${{ env.VCPKG_ROOT }}\vcpkg.exe" (
-            echo Cloning vcpkg...
-            git clone https://github.com/microsoft/vcpkg.git ${{ env.VCPKG_ROOT }}
-            cd ${{ env.VCPKG_ROOT }}
+          if (!(Test-Path "$env:VCPKG_ROOT\vcpkg.exe")) {
+            Write-Host "Cloning vcpkg..."
+            git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+            Set-Location "$env:VCPKG_ROOT"
             .\bootstrap-vcpkg.bat
-          ) else (
-            echo vcpkg already exists, updating...
-            cd ${{ env.VCPKG_ROOT }}
+          } else {
+            Write-Host "vcpkg already exists, updating..."
+            Set-Location "$env:VCPKG_ROOT"
             git pull origin master
             .\bootstrap-vcpkg.bat
-          )
-        shell: cmd
+          }
+        shell: powershell
 
       - name: Install dependencies
         run: |
-          cd private-repo
-          %VCPKG_ROOT%\vcpkg install openssl:x64-windows curl:x64-windows
-        shell: cmd
+          Set-Location private-repo
+          & "$env:VCPKG_ROOT\vcpkg" install openssl:x64-windows curl:x64-windows
+        shell: powershell
 
       - name: Configure CMake
         run: |
-          cd private-repo
-          mkdir build 2>nul
-          cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 ^
-            -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
-        shell: cmd
+          New-Item -ItemType Directory -Force -Path private-repo/build
+          Set-Location private-repo/build
+          cmake .. -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+        shell: powershell
 
       - name: Build Release
         run: |
-          cd private-repo/build
+          Set-Location private-repo/build
           cmake --build . --config Release
-        shell: cmd
+        shell: powershell
 
       - name: Verify executable
         run: |
-          if exist "private-repo\build\Release\client.exe" (
-            echo Build successful
-          ) else (
-            echo ERROR: client.exe not found
-            exit /b 1
-          )
-        shell: cmd
+          if (Test-Path "private-repo/build/Release/client.exe") {
+            Write-Host "Build successful"
+          } else {
+            Write-Host "ERROR: client.exe not found"
+            exit 1
+          }
+        shell: powershell
 
       - name: Create Release and upload asset
         run: |
