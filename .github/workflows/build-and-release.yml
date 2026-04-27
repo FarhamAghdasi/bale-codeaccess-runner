@@ -1,10 +1,10 @@
-name: Build C++
+name: Build C++ Service
 
 on:
   workflow_dispatch:
 
 env:
-  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT_C }}
+  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
   PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout public repo (workflow only)
+      - name: Checkout public repo
         uses: actions/checkout@v4
 
       - name: Clone private repository
@@ -20,14 +20,15 @@ jobs:
           git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
         shell: cmd
 
-      - name: Install vcpkg manually
+      - name: Clean and install vcpkg
         run: |
+          if exist "C:\vcpkg" rmdir /s /q "C:\vcpkg"
           git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
           cd C:\vcpkg
           .\bootstrap-vcpkg.bat
         shell: cmd
 
-      - name: Install dependencies via vcpkg
+      - name: Install dependencies
         run: |
           cd private-repo
           C:\vcpkg\vcpkg install openssl:x64-windows
@@ -59,16 +60,15 @@ jobs:
           )
         shell: cmd
 
-      - name: Create Release and Upload Asset with curl
+      - name: Create Release and upload asset
         run: |
           $tag = "build-$((Get-Date).ToString('yyyyMMdd-HHmmss'))"
-          $releaseName = "C++ RAT Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+          $releaseName = "Service Client Build - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
           
-          # Create release
           $body = @{
             tag_name = $tag
             name = $releaseName
-            body = "Automated C++ build from GitHub Actions"
+            body = "Automated build from GitHub Actions"
             draft = $false
             prerelease = $false
           } | ConvertTo-Json
@@ -84,7 +84,6 @@ jobs:
           
           $uploadUrl = $createResponse.upload_url -replace '{.*$', ''
           
-          # Upload asset using curl
           curl.exe -L `
             -X POST `
             -H "Authorization: Bearer ${{ env.PRIVATE_REPO_PAT }}" `
@@ -92,5 +91,5 @@ jobs:
             --upload-file "private-repo/build/Release/client.exe" `
             "$uploadUrl?name=client.exe"
           
-          Write-Host "Release created and asset uploaded successfully"
+          Write-Host "Success"
         shell: powershell
