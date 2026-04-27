@@ -26,13 +26,20 @@ jobs:
           cd bot-private
           pip install -r requirements.txt
 
-      - name: Install system dependencies (Playwright + v2ray)
+      - name: Install system dependencies (Playwright + Xray)
         run: |
           sudo apt-get update
           sudo apt-get install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 libasound2t64
-          # Install xray
-          bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+          # Install Xray
+          sudo bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+          # Ensure xray is executable
+          sudo chmod +x /usr/local/bin/xray
           python -m playwright install --with-deps chromium
+
+      - name: Verify Xray installation
+        run: |
+          xray version
+          echo "Xray installed at: $(which xray)"
 
       - name: Configure Git for backup pushes
         run: |
