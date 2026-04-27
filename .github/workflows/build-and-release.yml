@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
+  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT_C }}
   PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
 
 jobs:
