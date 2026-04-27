@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT_C }}
+  PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
   PRIVATE_REPO: ${{ secrets.PRIVATE_REPO_NAME }}
 
 jobs:
@@ -20,17 +20,18 @@ jobs:
           git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
         shell: cmd
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: 'C:/vcpkg'
-          vcpkgJsonGlob: '**/vcpkg.json'
+      - name: Install vcpkg manually
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          cd C:\vcpkg
+          .\bootstrap-vcpkg.bat
+        shell: cmd
 
       - name: Install dependencies via vcpkg
         run: |
           cd private-repo
-          vcpkg install openssl:x64-windows
-          vcpkg install libcurl:x64-windows
+          C:\vcpkg\vcpkg install openssl:x64-windows
+          C:\vcpkg\vcpkg install libcurl:x64-windows
         shell: cmd
 
       - name: Configure CMake
