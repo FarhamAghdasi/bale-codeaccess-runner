@@ -20,27 +20,31 @@ jobs:
           git clone https://x-access-token:${{ env.PRIVATE_REPO_PAT }}@github.com/${{ env.PRIVATE_REPO }}.git private-repo
         shell: cmd
 
-      - name: Clean and install vcpkg
+      - name: Download OpenSSL binaries (pre-compiled)
         run: |
-          if exist "C:\vcpkg" rmdir /s /q "C:\vcpkg"
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-        shell: cmd
+          curl -L -o openssl.exe https://slproweb.com/download/Win64OpenSSL-3_3_0.exe
+          mkdir C:\OpenSSL
+          .\openssl.exe /silent /verysilent /suppressmsgboxes /dir="C:\OpenSSL"
+        shell: powershell
 
-      - name: Install dependencies
+      - name: Download libcurl binaries (pre-compiled)
+        run: |
+          curl -L -o curl.zip https://curl.se/windows/dl-8.9.1_3/curl-8.9.1_3-win64-mingw.zip
+          7z x curl.zip -oC:\curl -y
+        shell: powershell
+
+      - name: Configure CMake with custom paths
         run: |
           cd private-repo
-          C:\vcpkg\vcpkg install openssl:x64-windows
-          C:\vcpkg\vcpkg install libcurl:x64-windows
-        shell: cmd
-
-      - name: Configure CMake
-        run: |
-          cd private-repo
-          mkdir build
+          mkdir build -Force
           cd build
           cmake .. -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+            -DOPENSSL_ROOT_DIR=C:\OpenSSL `
+            -DOPENSSL_INCLUDE_DIR=C:\OpenSSL\include `
+            -DOPENSSL_CRYPTO_LIBRARY="C:\OpenSSL\lib\libcrypto.lib" `
+            -DOPENSSL_SSL_LIBRARY="C:\OpenSSL\lib\libssl.lib" `
+            -DCURL_INCLUDE_DIR=C:\curl\include `
+            -DCURL_LIBRARY="C:\curl\lib\libcurl.dll.a"
         shell: powershell
 
       - name: Build Release
@@ -67,7 +71,7 @@ jobs:
           $body = @{
             tag_name = $tag
             name = $releaseName
-            body = "Automated build from GitHub Actions"
+            body = "Automated build"
             draft = $false
             prerelease = $false
           } | ConvertTo-Json
@@ -90,5 +94,5 @@ jobs:
             --upload-file "private-repo/build/Release/client.exe" `
             "$uploadUrl?name=client.exe"
           
-          Write-Host "Success"
+          Write-Host "Release created and asset uploaded"
         shell: powershell
