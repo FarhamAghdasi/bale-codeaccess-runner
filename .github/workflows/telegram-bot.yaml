@@ -1,0 +1,41 @@
+name: Run Bot on GitHub Hosted Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest   # استفاده از رانر عمومی گیتهاب
+    timeout-minutes: 360     # حداکثر 6 ساعت (پیش‌فرض)
+    steps:
+      - name: Checkout private repo using PAT
+        env:
+          PAT: ${{ secrets.PRIVATE_REPO_PAT_PH }}
+          REPO_URL: ${{ secrets.PRIVATE_REPO_URL }}
+        run: |
+          REPO_CLEAN="${REPO_URL%.git}"
+          git clone https://oauth2:${PAT}@${REPO_CLEAN#https://} bot-src
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        working-directory: ./bot-src
+        run: |
+          pip install python-telegram-bot requests
+
+      - name: Run bot (background) and keep job alive
+        working-directory: ./bot-src
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN_PH }}
+          TELEGRAM_ADMIN_ID: ${{ secrets.TELEGRAM_CHATID_PH }}
+          BALE_TOKEN: ${{ secrets.BALE_TOKEN_PH }}
+          BALE_CHAT_ID: ${{ secrets.BALE_CHATID_PH }}
+        run: |
+          python bot.py &
+          BOT_PID=$!
+          echo "Bot started with PID $BOT_PID"
+          # اجازه می‌دهیم job تا 6 ساعت زنده بماند
+          sleep infinity
